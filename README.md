@@ -42,16 +42,16 @@ python -m http.server 8000
 ### 3. GitHub Pages 자동 배포 설정
 
 1. 저장소 Settings > Pages > Source를 **GitHub Actions**로 설정
-2. 저장소 Settings > Secrets and variables > Actions에 `FIREBASE_CONFIG_JSON` 시크릿 추가. 값은 Firebase 설정 객체를 JSON으로:
-   ```json
-   {
-     "apiKey": "...",
-     "authDomain": "...",
-     "projectId": "...",
-     "storageBucket": "...",
-     "messagingSenderId": "...",
-     "appId": "..."
-   }
+2. 저장소 Settings > Secrets and variables > Actions에 `FIREBASE_CONFIG_JSON` 시크릿 추가. Firebase 콘솔의 "내 앱" 설정 화면에 나오는 `const firebaseConfig = { ... };` 블록을 그대로 복사해 붙여넣어도 되고, JSON으로 바꿔서 넣어도 된다 ([.github/scripts/write-firebase-config.js](.github/scripts/write-firebase-config.js)가 두 형식 모두 처리):
+   ```js
+   const firebaseConfig = {
+     apiKey: "...",
+     authDomain: "...",
+     projectId: "...",
+     storageBucket: "...",
+     messagingSenderId: "...",
+     appId: "...",
+   };
    ```
 3. `main` 브랜치에 푸시하면 [.github/workflows/deploy.yml](.github/workflows/deploy.yml) 워크플로우가 `js/firebase-config.js`를 시크릿으로부터 생성하고 GitHub Pages에 배포한다.
 

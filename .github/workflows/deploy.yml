@@ -27,12 +27,7 @@ jobs:
       - name: Generate firebase-config.js from secret
         env:
           FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
-        run: |
-          node -e "
-            const cfg = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
-            const out = 'export const firebaseConfig = ' + JSON.stringify(cfg, null, 2) + ';\n';
-            require('fs').writeFileSync('js/firebase-config.js', out);
-          "
+        run: node .github/scripts/write-firebase-config.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
