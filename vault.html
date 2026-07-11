@@ -16,9 +16,13 @@
     <div class="toolbar">
       <h2><span id="vaultName">볼트</span> <span class="tile-meta" id="vaultTypeLabel"></span></h2>
       <div style="display:flex; gap:8px;">
+        <button type="button" class="secondary" id="exportVaultBtn">내보내기</button>
         <button type="button" class="secondary" id="settingsBtn">설정</button>
         <button type="button" id="addCardBtn">+ 카드 추가</button>
       </div>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <input type="text" id="searchInput" placeholder="카드 검색 (앞면/뒷면)" />
     </div>
     <p class="kbd-hint">카드를 클릭해 선택 후: <kbd>Space</kbd> 뒤집기 · <kbd>1</kbd> again · <kbd>2</kbd> bad · <kbd>3</kbd> good · <kbd>4</kbd> ok</p>
     <div class="card-grid" id="cardGrid"></div>
@@ -102,7 +106,7 @@
     } from "./js/firebase.js";
     import {
       DEFAULT_INTERVAL_DAYS, nextIntervalDays, cardColor, formatExpiry, addDays, toDate,
-      withDefaultSettings,
+      withDefaultSettings, downloadJson,
     } from "./js/utils.js";
 
     const VAULT_TYPE_LABEL = { card: "카드 스타일", sentence: "문장 스타일" };
@@ -133,14 +137,18 @@
     const settingsForm = document.getElementById("settingsForm");
     const settingsError = document.getElementById("settingsError");
     const cancelSettings = document.getElementById("cancelSettings");
+    const exportVaultBtn = document.getElementById("exportVaultBtn");
+    const searchInput = document.getElementById("searchInput");
 
     let currentUser = null;
+    let currentVaultName = "";
     let unsubscribeCards = null;
     let editingCardId = null;
     let cardIdToDelete = null;
     let currentSettings = withDefaultSettings();
     let currentVaultType = "card";
     let activeCardId = null;
+    let searchQuery = "";
     const flippedCards = new Set();
 
     onAuthStateChanged(auth, async (user) => {
@@ -167,6 +175,7 @@
       }
       const data = snap.data();
       vaultNameEl.textContent = data.name;
+      currentVaultName = data.name;
       currentSettings = withDefaultSettings(data.settings);
       currentVaultType = data.type === "sentence" ? "sentence" : "card";
       vaultTypeLabelEl.textContent = VAULT_TYPE_LABEL[currentVaultType];
@@ -210,6 +219,36 @@
       } catch (err) {
         settingsError.textContent = "설정 저장에 실패했습니다.";
       }
+    });
+
+    exportVaultBtn.addEventListener("click", async () => {
+      exportVaultBtn.disabled = true;
+      exportVaultBtn.textContent = "내보내는 중...";
+      try {
+        const cards = lastDocs.map((docSnap) => {
+          const cd = docSnap.data();
+          const expiresAt = toDate(cd.expiresAt);
+          return {
+            front: cd.front,
+            back: cd.back,
+            status: cd.status || "graded",
+            intervalDays: cd.intervalDays || null,
+            expiresAt: expiresAt ? expiresAt.toISOString() : null,
+          };
+        });
+        downloadJson(
+          { exportedAt: new Date().toISOString(), name: currentVaultName, type: currentVaultType, settings: currentSettings, cards },
+          `maruanki-${currentVaultName || "vault"}-${new Date().toISOString().slice(0, 10)}.json`
+        );
+      } finally {
+        exportVaultBtn.disabled = false;
+        exportVaultBtn.textContent = "내보내기";
+      }
+    });
+
+    searchInput.addEventListener("input", (e) => {
+      searchQuery = e.target.value.trim().toLowerCase();
+      renderCardsNow();
     });
 
     function isAnyModalOpen() {
@@ -290,13 +329,25 @@
       return lastDocs.find((d) => d.id === cardId);
     }
 
+    function getVisibleDocs() {
+      if (!searchQuery) return lastDocs;
+      return lastDocs.filter((d) => {
+        const data = d.data();
+        return (data.front || "").toLowerCase().includes(searchQuery) || (data.back || "").toLowerCase().includes(searchQuery);
+      });
+    }
+
     function renderCardsNow() {
-      emptyState.classList.toggle("hidden", lastDocs.length !== 0);
+      const visible = getVisibleDocs();
+      emptyState.classList.toggle("hidden", visible.length !== 0);
+      emptyState.textContent = searchQuery
+        ? "검색 결과가 없습니다."
+        : "아직 카드가 없습니다. \"카드 추가\"로 첫 카드를 만들어보세요.";
       cardGrid.innerHTML = "";
-      if (!activeCardId || !findCardDoc(activeCardId)) {
-        activeCardId = lastDocs.length ? lastDocs[0].id : null;
+      if (!activeCardId || !visible.some((d) => d.id === activeCardId)) {
+        activeCardId = visible.length ? visible[0].id : null;
       }
-      lastDocs.forEach((docSnap) => renderCard(docSnap));
+      visible.forEach((docSnap) => renderCard(docSnap));
     }
 
     function setActiveCard(cardId) {

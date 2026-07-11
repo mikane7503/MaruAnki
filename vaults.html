@@ -15,6 +15,7 @@
   <div class="container">
     <div class="toolbar">
       <h2>내 볼트</h2>
+      <button type="button" class="secondary" id="exportAllBtn">전체 내보내기</button>
     </div>
     <div class="grid" id="vaultGrid">
       <div class="tile add-tile" id="addVaultTile">+</div>
@@ -74,7 +75,7 @@
       auth, db, onAuthStateChanged, signOut,
       collection, doc, addDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDocs,
     } from "./js/firebase.js";
-    import { cardColor, toDate } from "./js/utils.js";
+    import { cardColor, toDate, downloadJson } from "./js/utils.js";
 
     const VAULT_TYPE_LABEL = { card: "카드 스타일", sentence: "문장 스타일" };
 
@@ -90,6 +91,7 @@
     const cancelDelete = document.getElementById("cancelDelete");
     const confirmDelete = document.getElementById("confirmDelete");
     const logoutLink = document.getElementById("logoutLink");
+    const exportAllBtn = document.getElementById("exportAllBtn");
 
     let currentUser = null;
     let vaultToDelete = null;
@@ -131,6 +133,38 @@
         createModal.classList.add("hidden");
       } catch (err) {
         createError.textContent = "볼트 생성에 실패했습니다.";
+      }
+    });
+
+    exportAllBtn.addEventListener("click", async () => {
+      exportAllBtn.disabled = true;
+      exportAllBtn.textContent = "내보내는 중...";
+      try {
+        const vaultsSnap = await getDocs(query(collection(db, "users", currentUser.uid, "vaults"), orderBy("createdAt", "desc")));
+        const vaults = [];
+        for (const v of vaultsSnap.docs) {
+          const vData = v.data();
+          const cardsSnap = await getDocs(collection(db, "users", currentUser.uid, "vaults", v.id, "cards"));
+          const cards = cardsSnap.docs.map((c) => {
+            const cd = c.data();
+            const expiresAt = toDate(cd.expiresAt);
+            return {
+              front: cd.front,
+              back: cd.back,
+              status: cd.status || "graded",
+              intervalDays: cd.intervalDays || null,
+              expiresAt: expiresAt ? expiresAt.toISOString() : null,
+            };
+          });
+          vaults.push({ name: vData.name, type: vData.type, settings: vData.settings || null, cards });
+        }
+        downloadJson(
+          { exportedAt: new Date().toISOString(), vaults },
+          `maruanki-backup-${new Date().toISOString().slice(0, 10)}.json`
+        );
+      } finally {
+        exportAllBtn.disabled = false;
+        exportAllBtn.textContent = "전체 내보내기";
       }
     });
 
