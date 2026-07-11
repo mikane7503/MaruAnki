@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MaruAnki 로그인</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="auth-box">
+    <h2 id="formTitle">로그인</h2>
+    <form id="authForm">
+      <div class="field">
+        <label for="email">이메일</label>
+        <input type="email" id="email" required autocomplete="email" />
+      </div>
+      <div class="field">
+        <label for="password">비밀번호</label>
+        <input type="password" id="password" required autocomplete="current-password" minlength="6" />
+      </div>
+      <button type="submit" class="block" id="submitBtn">로그인</button>
+      <div class="error-msg" id="errorMsg"></div>
+    </form>
+    <div class="link-row">
+      <span id="toggleText">계정이 없으신가요?</span>
+      <a id="toggleLink">회원가입</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "./js/firebase.js";
+
+    let mode = "login"; // or "signup"
+
+    const formTitle = document.getElementById("formTitle");
+    const submitBtn = document.getElementById("submitBtn");
+    const toggleText = document.getElementById("toggleText");
+    const toggleLink = document.getElementById("toggleLink");
+    const errorMsg = document.getElementById("errorMsg");
+    const authForm = document.getElementById("authForm");
+
+    function render() {
+      if (mode === "login") {
+        formTitle.textContent = "로그인";
+        submitBtn.textContent = "로그인";
+        toggleText.textContent = "계정이 없으신가요?";
+        toggleLink.textContent = "회원가입";
+      } else {
+        formTitle.textContent = "회원가입";
+        submitBtn.textContent = "회원가입";
+        toggleText.textContent = "이미 계정이 있으신가요?";
+        toggleLink.textContent = "로그인";
+      }
+      errorMsg.textContent = "";
+    }
+
+    toggleLink.addEventListener("click", () => {
+      mode = mode === "login" ? "signup" : "login";
+      render();
+    });
+
+    authForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorMsg.textContent = "";
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      submitBtn.disabled = true;
+      try {
+        if (mode === "login") {
+          await signInWithEmailAndPassword(auth, email, password);
+        } else {
+          await createUserWithEmailAndPassword(auth, email, password);
+        }
+        window.location.href = "vaults.html";
+      } catch (err) {
+        errorMsg.textContent = translateError(err.code);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    function translateError(code) {
+      switch (code) {
+        case "auth/email-already-in-use":
+          return "이미 사용 중인 이메일입니다.";
+        case "auth/invalid-email":
+          return "이메일 형식이 올바르지 않습니다.";
+        case "auth/weak-password":
+          return "비밀번호는 6자 이상이어야 합니다.";
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+          return "이메일 또는 비밀번호가 올바르지 않습니다.";
+        default:
+          return "오류가 발생했습니다. 다시 시도해주세요.";
+      }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) window.location.href = "vaults.html";
+    });
+
+    render();
+  </script>
+</body>
+</html>

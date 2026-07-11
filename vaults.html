@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>내 볼트 - MaruAnki</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>MaruAnki</h1>
+    <a id="logoutLink">로그아웃</a>
+  </header>
+
+  <div class="container">
+    <div class="toolbar">
+      <h2>내 볼트</h2>
+    </div>
+    <div class="grid" id="vaultGrid">
+      <div class="tile add-tile" id="addVaultTile">+</div>
+    </div>
+    <div class="empty-state hidden" id="emptyState">아직 볼트가 없습니다. + 를 눌러 새 볼트를 만들어보세요.</div>
+  </div>
+
+  <div class="modal-overlay hidden" id="createModal">
+    <div class="modal">
+      <h3>새 볼트 만들기</h3>
+      <form id="createForm">
+        <div class="field">
+          <label for="vaultName">볼트 이름</label>
+          <input type="text" id="vaultName" required maxlength="50" placeholder="예: 영어 문장 100" />
+        </div>
+        <div class="field">
+          <label for="vaultType">형식</label>
+          <select id="vaultType">
+            <option value="sentence">문장 외우기</option>
+          </select>
+        </div>
+        <div class="error-msg" id="createError"></div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="cancelCreate">취소</button>
+          <button type="submit">만들기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="deleteModal">
+    <div class="modal">
+      <h3>볼트 삭제</h3>
+      <p id="deleteMsg" style="color: var(--muted); font-size: 14px;"></p>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="cancelDelete">취소</button>
+        <button type="button" class="danger" id="confirmDelete">삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      auth, db, onAuthStateChanged, signOut,
+      collection, doc, addDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDocs,
+    } from "./js/firebase.js";
+
+    const VAULT_TYPE_LABEL = { sentence: "문장 외우기" };
+
+    const vaultGrid = document.getElementById("vaultGrid");
+    const addVaultTile = document.getElementById("addVaultTile");
+    const emptyState = document.getElementById("emptyState");
+    const createModal = document.getElementById("createModal");
+    const createForm = document.getElementById("createForm");
+    const cancelCreate = document.getElementById("cancelCreate");
+    const createError = document.getElementById("createError");
+    const deleteModal = document.getElementById("deleteModal");
+    const deleteMsg = document.getElementById("deleteMsg");
+    const cancelDelete = document.getElementById("cancelDelete");
+    const confirmDelete = document.getElementById("confirmDelete");
+    const logoutLink = document.getElementById("logoutLink");
+
+    let currentUser = null;
+    let vaultToDelete = null;
+    let unsubscribe = null;
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        window.location.href = "index.html";
+        return;
+      }
+      currentUser = user;
+      subscribeVaults();
+    });
+
+    logoutLink.addEventListener("click", async () => {
+      await signOut(auth);
+      window.location.href = "index.html";
+    });
+
+    addVaultTile.addEventListener("click", () => {
+      createError.textContent = "";
+      createForm.reset();
+      createModal.classList.remove("hidden");
+    });
+
+    cancelCreate.addEventListener("click", () => createModal.classList.add("hidden"));
+
+    createForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("vaultName").value.trim();
+      const type = document.getElementById("vaultType").value;
+      if (!name) return;
+      try {
+        await addDoc(collection(db, "users", currentUser.uid, "vaults"), {
+          name,
+          type,
+          createdAt: serverTimestamp(),
+        });
+        createModal.classList.add("hidden");
+      } catch (err) {
+        createError.textContent = "볼트 생성에 실패했습니다.";
+      }
+    });
+
+    cancelDelete.addEventListener("click", () => {
+      vaultToDelete = null;
+      deleteModal.classList.add("hidden");
+    });
+
+    confirmDelete.addEventListener("click", async () => {
+      if (!vaultToDelete) return;
+      confirmDelete.disabled = true;
+      try {
+        const cardsSnap = await getDocs(collection(db, "users", currentUser.uid, "vaults", vaultToDelete, "cards"));
+        await Promise.all(cardsSnap.docs.map((c) => deleteDoc(c.ref)));
+        await deleteDoc(doc(db, "users", currentUser.uid, "vaults", vaultToDelete));
+      } finally {
+        confirmDelete.disabled = false;
+        vaultToDelete = null;
+        deleteModal.classList.add("hidden");
+      }
+    });
+
+    function subscribeVaults() {
+      if (unsubscribe) unsubscribe();
+      const q = query(collection(db, "users", currentUser.uid, "vaults"), orderBy("createdAt", "desc"));
+      unsubscribe = onSnapshot(q, (snap) => {
+        [...vaultGrid.querySelectorAll(".vault-tile")].forEach((el) => el.remove());
+        emptyState.classList.toggle("hidden", !snap.empty);
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          const tile = document.createElement("div");
+          tile.className = "tile vault-tile";
+          tile.innerHTML = `
+            <h3></h3>
+            <div class="tile-meta"></div>
+            <div class="card-actions" style="margin-top:12px;">
+              <button type="button" class="icon-btn open-btn">열기</button>
+              <button type="button" class="icon-btn del-btn">삭제</button>
+            </div>
+          `;
+          tile.querySelector("h3").textContent = data.name;
+          tile.querySelector(".tile-meta").textContent = VAULT_TYPE_LABEL[data.type] || data.type;
+          tile.querySelector(".open-btn").addEventListener("click", () => {
+            window.location.href = `vault.html?id=${docSnap.id}`;
+          });
+          tile.querySelector(".del-btn").addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            vaultToDelete = docSnap.id;
+            deleteMsg.textContent = `"${data.name}" 볼트를 삭제하면 안의 모든 카드가 함께 사라집니다. 계속할까요?`;
+            deleteModal.classList.remove("hidden");
+          });
+          tile.addEventListener("click", (ev) => {
+            if (ev.target.tagName === "BUTTON") return;
+            window.location.href = `vault.html?id=${docSnap.id}`;
+          });
+          vaultGrid.appendChild(tile);
+        });
+      });
+    }
+  </script>
+</body>
+</html>

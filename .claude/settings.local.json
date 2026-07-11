@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"/c/Users/yss19/Claude Projects/MaruAnki\" 2>&1 || ls -la .)"
+    ]
+  }
+}
