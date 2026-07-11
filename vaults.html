@@ -31,10 +31,23 @@
           <input type="text" id="vaultName" required maxlength="50" placeholder="예: 영어 문장 100" />
         </div>
         <div class="field">
-          <label for="vaultType">형식</label>
-          <select id="vaultType">
-            <option value="sentence">문장 외우기</option>
-          </select>
+          <label>형식 (생성 후에는 바꿀 수 없습니다)</label>
+          <div class="style-choice">
+            <label class="style-option">
+              <input type="radio" name="vaultType" value="card" checked />
+              <span class="style-option-body">
+                <strong>카드 스타일</strong>
+                <span>일반적인 Anki 방식. 짧은 질문/답 카드를 여러 장 빠르게 넘기며 복습할 때.</span>
+              </span>
+            </label>
+            <label class="style-option">
+              <input type="radio" name="vaultType" value="sentence" />
+              <span class="style-option-body">
+                <strong>문장 스타일</strong>
+                <span>긴 문장을 통째로 외울 때 최적화. 카드 한 장을 넓고 읽기 편하게 표시.</span>
+              </span>
+            </label>
+          </div>
         </div>
         <div class="error-msg" id="createError"></div>
         <div class="modal-actions">
@@ -63,7 +76,7 @@
     } from "./js/firebase.js";
     import { cardColor, toDate } from "./js/utils.js";
 
-    const VAULT_TYPE_LABEL = { sentence: "문장 외우기" };
+    const VAULT_TYPE_LABEL = { card: "카드 스타일", sentence: "문장 스타일" };
 
     const vaultGrid = document.getElementById("vaultGrid");
     const addVaultTile = document.getElementById("addVaultTile");
@@ -107,7 +120,7 @@
     createForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = document.getElementById("vaultName").value.trim();
-      const type = document.getElementById("vaultType").value;
+      const type = document.querySelector('input[name="vaultType"]:checked').value;
       if (!name) return;
       try {
         await addDoc(collection(db, "users", currentUser.uid, "vaults"), {

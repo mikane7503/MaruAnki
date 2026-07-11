@@ -14,7 +14,7 @@
 
   <div class="container">
     <div class="toolbar">
-      <h2 id="vaultName">볼트</h2>
+      <h2><span id="vaultName">볼트</span> <span class="tile-meta" id="vaultTypeLabel"></span></h2>
       <div style="display:flex; gap:8px;">
         <button type="button" class="secondary" id="settingsBtn">설정</button>
         <button type="button" id="addCardBtn">+ 카드 추가</button>
@@ -105,11 +105,15 @@
       withDefaultSettings,
     } from "./js/utils.js";
 
+    const VAULT_TYPE_LABEL = { card: "카드 스타일", sentence: "문장 스타일" };
+    const VAULT_TYPE_MAXLENGTH = { card: 300, sentence: 4000 };
+
     const params = new URLSearchParams(window.location.search);
     const vaultId = params.get("id");
     if (!vaultId) window.location.href = "vaults.html";
 
     const vaultNameEl = document.getElementById("vaultName");
+    const vaultTypeLabelEl = document.getElementById("vaultTypeLabel");
     const cardGrid = document.getElementById("cardGrid");
     const emptyState = document.getElementById("emptyState");
     const addCardBtn = document.getElementById("addCardBtn");
@@ -135,6 +139,7 @@
     let editingCardId = null;
     let cardIdToDelete = null;
     let currentSettings = withDefaultSettings();
+    let currentVaultType = "card";
     let activeCardId = null;
     const flippedCards = new Set();
 
@@ -163,6 +168,12 @@
       const data = snap.data();
       vaultNameEl.textContent = data.name;
       currentSettings = withDefaultSettings(data.settings);
+      currentVaultType = data.type === "sentence" ? "sentence" : "card";
+      vaultTypeLabelEl.textContent = VAULT_TYPE_LABEL[currentVaultType];
+      cardGrid.classList.add(`style-${currentVaultType}`);
+      const maxLen = VAULT_TYPE_MAXLENGTH[currentVaultType];
+      cardFront.maxLength = maxLen;
+      cardBack.maxLength = maxLen;
     }
 
     settingsBtn.addEventListener("click", () => {
@@ -205,11 +216,22 @@
       return ![cardModal, deleteCardModal, settingsModal].every((m) => m.classList.contains("hidden"));
     }
 
+    function applyCardFormPlaceholders() {
+      if (currentVaultType === "sentence") {
+        cardFront.placeholder = "외울 문장 전체를 입력하세요";
+        cardBack.placeholder = "번역 또는 의미를 입력하세요";
+      } else {
+        cardFront.placeholder = "짧은 질문을 입력하세요";
+        cardBack.placeholder = "답을 입력하세요";
+      }
+    }
+
     addCardBtn.addEventListener("click", () => {
       editingCardId = null;
       cardModalTitle.textContent = "카드 추가";
       cardForm.reset();
       cardError.textContent = "";
+      applyCardFormPlaceholders();
       cardModal.classList.remove("hidden");
     });
 
@@ -488,6 +510,7 @@
     function openEdit(cardId, data) {
       editingCardId = cardId;
       cardModalTitle.textContent = "카드 수정";
+      applyCardFormPlaceholders();
       cardFront.value = data.front;
       cardBack.value = data.back;
       cardError.textContent = "";

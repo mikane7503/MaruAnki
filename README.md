@@ -7,7 +7,9 @@
 ## 기능
 
 - 이메일/비밀번호 회원가입, 로그인
-- 로그인 후 "볼트"(데이터베이스 단위) 생성. 현재 지원 형식: **문장 외우기**
+- 로그인 후 "볼트"(데이터베이스 단위) 생성. 생성 시 형식을 하나 고르며, **생성 후에는 형식을 바꿀 수 없음** (레이아웃 자체가 달라지기 때문)
+  - **카드 스타일**: 일반적인 Anki 방식. 여러 열 그리드에 짧은 문답 카드를 촘촘히 배치, 텍스트 최대 300자
+  - **문장 스타일**: 긴 문장 통째로 외우기 최적화. 1열 전체 너비, 더 큰 글자/줄간격, 텍스트 최대 4000자
 - 볼트 안에 카드 생성/수정/삭제. 카드는 앞면/뒷면 구조
   - 기본은 앞면(전체 텍스트 + 만료기간)만 노출, 만료 임박도에 따라 초록→노랑→빨강으로 색이 바뀜
   - 앞면 클릭 시 뒷면(답) 확인
@@ -70,7 +72,7 @@ python -m http.server 8000
 ```
 users/{uid}/vaults/{vaultId}
   - name: string
-  - type: "sentence"
+  - type: "card" | "sentence" (생성 후 불변)
   - createdAt: timestamp
   - settings: { baseIntervalDays, minIntervalDays, maxIntervalDays, badMultiplier, goodMultiplier, easyMultiplier }
 
