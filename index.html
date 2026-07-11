@@ -91,8 +91,15 @@
         case "auth/wrong-password":
         case "auth/user-not-found":
           return "이메일 또는 비밀번호가 올바르지 않습니다.";
+        case "auth/operation-not-allowed":
+          return "이메일/비밀번호 로그인이 아직 활성화되지 않았습니다. Firebase 콘솔 > Authentication > Sign-in method에서 켜주세요.";
+        case "auth/network-request-failed":
+          return "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.";
+        case "auth/unauthorized-domain":
+          return "이 도메인은 Firebase 인증에 등록되어 있지 않습니다. Authentication > Settings > Authorized domains에 추가해주세요.";
         default:
-          return "오류가 발생했습니다. 다시 시도해주세요.";
+          console.error(code);
+          return `오류가 발생했습니다 (${code}). 다시 시도해주세요.`;
       }
     }
 
