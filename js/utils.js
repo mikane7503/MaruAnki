@@ -2,10 +2,29 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_INTERVAL_DAYS = 5;
 export const MAX_INTERVAL_DAYS = 60;
 
+export const DEFAULT_SETTINGS = {
+  baseIntervalDays: DEFAULT_INTERVAL_DAYS,
+  minIntervalDays: 1,
+  maxIntervalDays: MAX_INTERVAL_DAYS,
+  badMultiplier: 1.2,
+  goodMultiplier: 2.0,
+  easyMultiplier: 3.0,
+};
+
+export function withDefaultSettings(settings) {
+  return { ...DEFAULT_SETTINGS, ...(settings || {}) };
+}
+
 // 카드 상태: 'graded'(시간에 따라 색이 변함) | 'held'(사용자가 고정, 항상 노랑)
-export function nextIntervalDays(prevIntervalDays) {
-  const prev = prevIntervalDays || DEFAULT_INTERVAL_DAYS;
-  return Math.min(prev * 2, MAX_INTERVAL_DAYS);
+
+// grade: 'bad' | 'good' | 'easy'
+export function nextIntervalDays(prevIntervalDays, grade, settings) {
+  const s = withDefaultSettings(settings);
+  const prev = prevIntervalDays || s.baseIntervalDays;
+  const multiplier =
+    grade === "easy" ? s.easyMultiplier : grade === "bad" ? s.badMultiplier : s.goodMultiplier;
+  const next = Math.round(prev * multiplier * 10) / 10;
+  return Math.min(Math.max(next, s.minIntervalDays), s.maxIntervalDays);
 }
 
 // status: 'graded' | 'held'

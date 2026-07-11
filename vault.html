@@ -15,7 +15,10 @@
   <div class="container">
     <div class="toolbar">
       <h2 id="vaultName">볼트</h2>
-      <button type="button" id="addCardBtn">+ 카드 추가</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="secondary" id="settingsBtn">설정</button>
+        <button type="button" id="addCardBtn">+ 카드 추가</button>
+      </div>
     </div>
     <div class="card-grid" id="cardGrid"></div>
     <div class="empty-state hidden" id="emptyState">아직 카드가 없습니다. "카드 추가"로 첫 카드를 만들어보세요.</div>
@@ -53,12 +56,53 @@
     </div>
   </div>
 
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal">
+      <h3>볼트 설정</h3>
+      <p style="color: var(--muted); font-size: 13px; margin-top: -8px;">복습 버튼을 누를 때 만료일을 계산하는 방식을 조정합니다.</p>
+      <form id="settingsForm">
+        <div class="field">
+          <label for="setBaseInterval">기본 간격 (일) — 새 카드 / 다시체크 시 사용</label>
+          <input type="number" id="setBaseInterval" min="1" step="1" required />
+        </div>
+        <div class="field">
+          <label for="setBadMultiplier">나쁨(bad) 배율</label>
+          <input type="number" id="setBadMultiplier" min="1" step="0.1" required />
+        </div>
+        <div class="field">
+          <label for="setGoodMultiplier">좋음(good) 배율</label>
+          <input type="number" id="setGoodMultiplier" min="1" step="0.1" required />
+        </div>
+        <div class="field">
+          <label for="setEasyMultiplier">쉬움(ok) 배율</label>
+          <input type="number" id="setEasyMultiplier" min="1" step="0.1" required />
+        </div>
+        <div class="field">
+          <label for="setMinInterval">최소 간격 (일)</label>
+          <input type="number" id="setMinInterval" min="1" step="1" required />
+        </div>
+        <div class="field">
+          <label for="setMaxInterval">최대 간격 (일)</label>
+          <input type="number" id="setMaxInterval" min="1" step="1" required />
+        </div>
+        <div class="error-msg" id="settingsError"></div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="cancelSettings">취소</button>
+          <button type="submit">저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script type="module">
     import {
       auth, db, onAuthStateChanged, signOut,
       collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc,
     } from "./js/firebase.js";
-    import { DEFAULT_INTERVAL_DAYS, nextIntervalDays, cardColor, formatExpiry, addDays, toDate } from "./js/utils.js";
+    import {
+      DEFAULT_INTERVAL_DAYS, nextIntervalDays, cardColor, formatExpiry, addDays, toDate,
+      withDefaultSettings,
+    } from "./js/utils.js";
 
     const params = new URLSearchParams(window.location.search);
     const vaultId = params.get("id");
@@ -79,11 +123,17 @@
     const cancelDeleteCard = document.getElementById("cancelDeleteCard");
     const confirmDeleteCard = document.getElementById("confirmDeleteCard");
     const logoutLink = document.getElementById("logoutLink");
+    const settingsBtn = document.getElementById("settingsBtn");
+    const settingsModal = document.getElementById("settingsModal");
+    const settingsForm = document.getElementById("settingsForm");
+    const settingsError = document.getElementById("settingsError");
+    const cancelSettings = document.getElementById("cancelSettings");
 
     let currentUser = null;
     let unsubscribeCards = null;
     let editingCardId = null;
     let cardIdToDelete = null;
+    let currentSettings = withDefaultSettings();
     const flippedCards = new Set();
 
     onAuthStateChanged(auth, async (user) => {
@@ -108,8 +158,46 @@
         window.location.href = "vaults.html";
         return;
       }
-      vaultNameEl.textContent = snap.data().name;
+      const data = snap.data();
+      vaultNameEl.textContent = data.name;
+      currentSettings = withDefaultSettings(data.settings);
     }
+
+    settingsBtn.addEventListener("click", () => {
+      settingsError.textContent = "";
+      document.getElementById("setBaseInterval").value = currentSettings.baseIntervalDays;
+      document.getElementById("setBadMultiplier").value = currentSettings.badMultiplier;
+      document.getElementById("setGoodMultiplier").value = currentSettings.goodMultiplier;
+      document.getElementById("setEasyMultiplier").value = currentSettings.easyMultiplier;
+      document.getElementById("setMinInterval").value = currentSettings.minIntervalDays;
+      document.getElementById("setMaxInterval").value = currentSettings.maxIntervalDays;
+      settingsModal.classList.remove("hidden");
+    });
+
+    cancelSettings.addEventListener("click", () => settingsModal.classList.add("hidden"));
+
+    settingsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const newSettings = {
+        baseIntervalDays: Number(document.getElementById("setBaseInterval").value),
+        badMultiplier: Number(document.getElementById("setBadMultiplier").value),
+        goodMultiplier: Number(document.getElementById("setGoodMultiplier").value),
+        easyMultiplier: Number(document.getElementById("setEasyMultiplier").value),
+        minIntervalDays: Number(document.getElementById("setMinInterval").value),
+        maxIntervalDays: Number(document.getElementById("setMaxInterval").value),
+      };
+      if (newSettings.minIntervalDays > newSettings.maxIntervalDays) {
+        settingsError.textContent = "최소 간격이 최대 간격보다 클 수 없습니다.";
+        return;
+      }
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid, "vaults", vaultId), { settings: newSettings });
+        currentSettings = withDefaultSettings(newSettings);
+        settingsModal.classList.add("hidden");
+      } catch (err) {
+        settingsError.textContent = "설정 저장에 실패했습니다.";
+      }
+    });
 
     addCardBtn.addEventListener("click", () => {
       editingCardId = null;
@@ -132,12 +220,13 @@
           await updateDoc(doc(cardsCol, editingCardId), { front, back, updatedAt: serverTimestamp() });
         } else {
           const now = new Date();
+          const base = currentSettings.baseIntervalDays;
           await addDoc(cardsCol, {
             front,
             back,
             status: "graded",
-            intervalDays: DEFAULT_INTERVAL_DAYS,
-            expiresAt: addDays(now, DEFAULT_INTERVAL_DAYS),
+            intervalDays: base,
+            expiresAt: addDays(now, base),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -205,7 +294,7 @@
       const footer = document.createElement("div");
       footer.className = "card-footer";
       const expiryText = document.createElement("span");
-      expiryText.textContent = card.status === "held" ? "고정됨 (아이마이)" : formatExpiry(card.expiresAt);
+      expiryText.textContent = card.status === "held" ? "고정됨 (again)" : formatExpiry(card.expiresAt);
       footer.appendChild(expiryText);
 
       const editBtn = document.createElement("button");
@@ -236,37 +325,59 @@
         const actions = document.createElement("div");
         actions.className = "card-actions";
 
-        const knowBtn = document.createElement("button");
-        knowBtn.type = "button";
-        knowBtn.className = "btn-know";
-        knowBtn.textContent = "이이네";
-        knowBtn.addEventListener("click", async (ev) => {
+        const cardRef = doc(db, "users", currentUser.uid, "vaults", vaultId, "cards", cardId);
+
+        const againBtn = document.createElement("button");
+        againBtn.type = "button";
+        againBtn.className = "btn-unknown";
+        againBtn.textContent = data.status === "held" ? "다시 체크 (해제)" : "again";
+        againBtn.addEventListener("click", async (ev) => {
           ev.stopPropagation();
-          const newInterval = nextIntervalDays(data.intervalDays);
-          await updateDoc(doc(db, "users", currentUser.uid, "vaults", vaultId, "cards", cardId), {
-            status: "graded",
-            intervalDays: newInterval,
-            expiresAt: addDays(new Date(), newInterval),
-            updatedAt: serverTimestamp(),
-          });
+          if (data.status === "held") {
+            const base = currentSettings.baseIntervalDays;
+            await updateDoc(cardRef, {
+              status: "graded",
+              intervalDays: base,
+              expiresAt: addDays(new Date(), base),
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            await updateDoc(cardRef, {
+              status: "held",
+              intervalDays: currentSettings.baseIntervalDays,
+              updatedAt: serverTimestamp(),
+            });
+          }
           flippedCards.delete(cardId);
         });
+        actions.appendChild(againBtn);
 
-        const unknownBtn = document.createElement("button");
-        unknownBtn.type = "button";
-        unknownBtn.className = "btn-unknown";
-        unknownBtn.textContent = "아이마이";
-        unknownBtn.addEventListener("click", async (ev) => {
-          ev.stopPropagation();
-          await updateDoc(doc(db, "users", currentUser.uid, "vaults", vaultId, "cards", cardId), {
-            status: "held",
-            updatedAt: serverTimestamp(),
+        if (data.status !== "held") {
+          [
+            { grade: "bad", label: "bad", cls: "btn-bad" },
+            { grade: "good", label: "good", cls: "btn-know" },
+            { grade: "easy", label: "ok", cls: "btn-know" },
+          ].forEach(({ grade, label, cls }) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            if (cls) btn.className = cls;
+            btn.textContent = label;
+            btn.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+              const baseInterval = data.status === "held" ? currentSettings.baseIntervalDays : data.intervalDays;
+              const newInterval = nextIntervalDays(baseInterval, grade, currentSettings);
+              await updateDoc(cardRef, {
+                status: "graded",
+                intervalDays: newInterval,
+                expiresAt: addDays(new Date(), newInterval),
+                updatedAt: serverTimestamp(),
+              });
+              flippedCards.delete(cardId);
+            });
+            actions.appendChild(btn);
           });
-          flippedCards.delete(cardId);
-        });
+        }
 
-        actions.appendChild(knowBtn);
-        actions.appendChild(unknownBtn);
         el.appendChild(actions);
       }
 

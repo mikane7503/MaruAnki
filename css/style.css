@@ -277,6 +277,10 @@ button.block {
   color: #4a3b00 !important;
 }
 
+.btn-bad {
+  background: var(--red) !important;
+}
+
 .icon-btn {
   background: transparent;
   color: var(--muted);

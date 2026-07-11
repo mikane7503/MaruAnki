@@ -11,8 +11,10 @@
 - 볼트 안에 카드 생성/수정/삭제. 카드는 앞면/뒷면 구조
   - 기본은 앞면(전체 텍스트 + 만료기간)만 노출, 만료 임박도에 따라 초록→노랑→빨강으로 색이 바뀜
   - 앞면 클릭 시 뒷면(답) 확인
-  - 뒷면 상태에서 **"이이네"**: 만료기간 연장(기본 5일, 누를 때마다 2배씩 증가, 최대 60일) + 초록색 고정 등급으로 리셋
-  - 뒷면 상태에서 **"아이마이"**: 노랑으로 고정, 사용자가 다시 조작하기 전까지 시간에 따라 변하지 않음
+  - 뒷면 상태에서 Anki 스타일 복습 버튼 제공
+    - **again**: 노랑으로 고정(무한 대기), 사용자가 다시 누르기 전까지 시간에 따라 변하지 않음. 고정 상태에서 같은 버튼을 다시 누르면("다시 체크") 원상태(등급 모드)로 복귀
+    - **bad / good / ok**: 각각 배율(기본 1.2x / 2x / 3x)만큼 만료 간격을 늘리고 초록색 등급 모드로 전환
+  - 볼트 상세 화면의 **설정** 버튼에서 기본 간격, bad/good/ok 배율, 최소·최대 간격을 조정 가능
 
 ## 처음 설정하기
 
@@ -64,6 +66,7 @@ users/{uid}/vaults/{vaultId}
   - name: string
   - type: "sentence"
   - createdAt: timestamp
+  - settings: { baseIntervalDays, minIntervalDays, maxIntervalDays, badMultiplier, goodMultiplier, easyMultiplier }
 
 users/{uid}/vaults/{vaultId}/cards/{cardId}
   - front: string
