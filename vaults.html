@@ -61,6 +61,7 @@
       auth, db, onAuthStateChanged, signOut,
       collection, doc, addDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDocs,
     } from "./js/firebase.js";
+    import { cardColor, toDate } from "./js/utils.js";
 
     const VAULT_TYPE_LABEL = { sentence: "문장 외우기" };
 
@@ -150,6 +151,7 @@
           const tile = document.createElement("div");
           tile.className = "tile vault-tile";
           tile.innerHTML = `
+            <span class="due-badge hidden"></span>
             <h3></h3>
             <div class="tile-meta"></div>
             <div class="card-actions" style="margin-top:12px;">
@@ -173,8 +175,31 @@
             window.location.href = `vault.html?id=${docSnap.id}`;
           });
           vaultGrid.appendChild(tile);
+          loadDueBadge(docSnap.id, tile.querySelector(".due-badge"));
         });
       });
+    }
+
+    async function loadDueBadge(vaultId, badgeEl) {
+      try {
+        const cardsSnap = await getDocs(collection(db, "users", currentUser.uid, "vaults", vaultId, "cards"));
+        let dueCount = 0;
+        cardsSnap.forEach((c) => {
+          const data = c.data();
+          const color = cardColor({
+            status: data.status || "graded",
+            intervalDays: data.intervalDays,
+            expiresAt: toDate(data.expiresAt),
+          });
+          if (color === "red") dueCount += 1;
+        });
+        if (dueCount > 0) {
+          badgeEl.textContent = `복습 필요 ${dueCount}개`;
+          badgeEl.classList.remove("hidden");
+        }
+      } catch {
+        // 배지는 부가 정보이므로 실패해도 조용히 무시
+      }
     }
   </script>
 </body>

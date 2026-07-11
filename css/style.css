@@ -5,6 +5,7 @@
   --muted: #5f6368;
   --border: #e0e0e0;
   --accent: #4a5568;
+  --accent-ring: rgba(74, 85, 104, 0.45);
   --green: #34a853;
   --green-bg: #e6f4ea;
   --yellow: #f9a825;
@@ -12,6 +13,33 @@
   --red: #d93025;
   --red-bg: #fce8e6;
   --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --surface: #242527;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --border: #3c3d40;
+    --accent: #8ab4f8;
+    --accent-ring: rgba(138, 180, 248, 0.5);
+    --green: #6fcf87;
+    --green-bg: #1f3324;
+    --yellow: #f4c04a;
+    --yellow-bg: #3a2f10;
+    --red: #f28b82;
+    --red-bg: #3a2020;
+  }
+
+  button {
+    color: #17181a;
+  }
+
+  button.secondary,
+  .icon-btn {
+    color: var(--accent);
+  }
 }
 
 * {
@@ -49,6 +77,7 @@ header.topbar a {
   color: var(--accent);
   text-decoration: none;
   font-size: 14px;
+  padding: 8px;
 }
 
 .auth-box {
@@ -79,13 +108,14 @@ header.topbar a {
 input[type="text"],
 input[type="email"],
 input[type="password"],
+input[type="number"],
 textarea,
 select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
   background: var(--surface);
   color: var(--text);
@@ -100,7 +130,8 @@ button {
   cursor: pointer;
   border: none;
   border-radius: 8px;
-  padding: 10px 16px;
+  padding: 12px 18px;
+  min-height: 44px;
   font-size: 14px;
   font-family: inherit;
   background: var(--accent);
@@ -152,6 +183,7 @@ button.block {
 }
 
 .tile {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -167,6 +199,7 @@ button.block {
 .tile h3 {
   margin: 0 0 6px;
   font-size: 16px;
+  padding-right: 60px;
 }
 
 .tile .tile-meta {
@@ -181,6 +214,20 @@ button.block {
   border-style: dashed;
   color: var(--muted);
   font-size: 28px;
+  min-height: 88px;
+}
+
+.due-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .toolbar {
@@ -204,41 +251,84 @@ button.block {
   margin-top: 16px;
 }
 
-.card {
+/* 3D 플립 카드: grid stacking으로 앞/뒤 중 더 긴 쪽에 자동으로 높이를 맞춘다 */
+.card-flip {
+  perspective: 1600px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.card-flip.color-green {
+  border-color: var(--green);
+}
+
+.card-flip.color-yellow {
+  border-color: var(--yellow);
+}
+
+.card-flip.color-red {
+  border-color: var(--red);
+}
+
+.card-flip.active {
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.card-flip-inner {
+  position: relative;
+  display: grid;
+  min-height: 160px;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.card-flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  grid-column: 1;
+  grid-row: 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: calc(var(--radius) - 2px);
   padding: 16px;
-  min-height: 140px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   background: var(--surface);
 }
 
-.card.color-green {
+.card-face-back {
+  transform: rotateY(180deg);
+}
+
+.card-flip.color-green .card-face {
   background: var(--green-bg);
-  border-color: var(--green);
 }
 
-.card.color-yellow {
+.card-flip.color-yellow .card-face {
   background: var(--yellow-bg);
-  border-color: var(--yellow);
 }
 
-.card.color-red {
+.card-flip.color-red .card-face {
   background: var(--red-bg);
-  border-color: var(--red);
 }
 
-.card .card-text {
+.card-text {
   font-size: 15px;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
   cursor: pointer;
   flex: 1;
 }
 
-.card .card-face-label {
+.card-face-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -246,30 +336,54 @@ button.block {
   margin-bottom: 6px;
 }
 
-.card .card-footer {
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-chip .status-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 10px;
   font-size: 12px;
   color: var(--muted);
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.card .card-actions {
+.card-actions {
   display: flex;
   gap: 8px;
   margin-top: 10px;
   flex-wrap: wrap;
 }
 
-.card .card-actions button {
+.card-actions button {
   flex: 1;
+  min-width: 64px;
   font-size: 13px;
-  padding: 8px 10px;
+  padding: 10px;
+}
+
+.card-edit-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .btn-know {
   background: var(--green) !important;
+  color: #063514 !important;
 }
 
 .btn-unknown {
@@ -279,12 +393,14 @@ button.block {
 
 .btn-bad {
   background: var(--red) !important;
+  color: #430c07 !important;
 }
 
 .icon-btn {
   background: transparent;
   color: var(--muted);
-  padding: 4px 8px;
+  padding: 8px 10px;
+  min-height: 40px;
   font-size: 12px;
   border: 1px solid var(--border);
 }
@@ -306,6 +422,8 @@ button.block {
   padding: 24px;
   width: 100%;
   max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal h3 {
@@ -328,4 +446,42 @@ button.block {
   color: var(--muted);
   margin-top: 60px;
   font-size: 14px;
+}
+
+.kbd-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.kbd-hint kbd {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  background: var(--surface);
+}
+
+@media (max-width: 480px) {
+  .grid,
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar > div {
+    display: flex;
+    gap: 8px;
+  }
+
+  .toolbar > div button {
+    flex: 1;
+  }
 }

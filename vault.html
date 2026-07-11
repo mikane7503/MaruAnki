@@ -20,6 +20,7 @@
         <button type="button" id="addCardBtn">+ 카드 추가</button>
       </div>
     </div>
+    <p class="kbd-hint">카드를 클릭해 선택 후: <kbd>Space</kbd> 뒤집기 · <kbd>1</kbd> again · <kbd>2</kbd> bad · <kbd>3</kbd> good · <kbd>4</kbd> ok</p>
     <div class="card-grid" id="cardGrid"></div>
     <div class="empty-state hidden" id="emptyState">아직 카드가 없습니다. "카드 추가"로 첫 카드를 만들어보세요.</div>
   </div>
@@ -134,6 +135,7 @@
     let editingCardId = null;
     let cardIdToDelete = null;
     let currentSettings = withDefaultSettings();
+    let activeCardId = null;
     const flippedCards = new Set();
 
     onAuthStateChanged(auth, async (user) => {
@@ -199,6 +201,10 @@
       }
     });
 
+    function isAnyModalOpen() {
+      return ![cardModal, deleteCardModal, settingsModal].every((m) => m.classList.contains("hidden"));
+    }
+
     addCardBtn.addEventListener("click", () => {
       editingCardId = null;
       cardModalTitle.textContent = "카드 추가";
@@ -258,10 +264,124 @@
       });
     }
 
+    function findCardDoc(cardId) {
+      return lastDocs.find((d) => d.id === cardId);
+    }
+
     function renderCardsNow() {
       emptyState.classList.toggle("hidden", lastDocs.length !== 0);
       cardGrid.innerHTML = "";
+      if (!activeCardId || !findCardDoc(activeCardId)) {
+        activeCardId = lastDocs.length ? lastDocs[0].id : null;
+      }
       lastDocs.forEach((docSnap) => renderCard(docSnap));
+    }
+
+    function setActiveCard(cardId) {
+      if (activeCardId === cardId) return;
+      const prev = cardGrid.querySelector(".card-flip.active");
+      if (prev) prev.classList.remove("active");
+      activeCardId = cardId;
+      const el = cardGrid.querySelector(`.card-flip[data-card-id="${cardId}"]`);
+      if (el) el.classList.add("active");
+    }
+
+    function setFlipped(cardId, flipped) {
+      if (flipped) flippedCards.add(cardId);
+      else flippedCards.delete(cardId);
+      const inner = cardGrid.querySelector(`.card-flip[data-card-id="${cardId}"] .card-flip-inner`);
+      if (inner) inner.classList.toggle("flipped", flipped);
+      setActiveCard(cardId);
+    }
+
+    async function gradeCard(cardId, grade) {
+      const docSnap = findCardDoc(cardId);
+      if (!docSnap || !flippedCards.has(cardId)) return;
+      const data = docSnap.data();
+      if (data.status === "held") return;
+      const cardRef = doc(db, "users", currentUser.uid, "vaults", vaultId, "cards", cardId);
+      const newInterval = nextIntervalDays(data.intervalDays, grade, currentSettings);
+      flippedCards.delete(cardId);
+      await updateDoc(cardRef, {
+        status: "graded",
+        intervalDays: newInterval,
+        expiresAt: addDays(new Date(), newInterval),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    async function toggleAgain(cardId) {
+      const docSnap = findCardDoc(cardId);
+      if (!docSnap || !flippedCards.has(cardId)) return;
+      const data = docSnap.data();
+      const cardRef = doc(db, "users", currentUser.uid, "vaults", vaultId, "cards", cardId);
+      flippedCards.delete(cardId);
+      if (data.status === "held") {
+        const base = currentSettings.baseIntervalDays;
+        await updateDoc(cardRef, {
+          status: "graded",
+          intervalDays: base,
+          expiresAt: addDays(new Date(), base),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await updateDoc(cardRef, {
+          status: "held",
+          intervalDays: currentSettings.baseIntervalDays,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+
+    function statusChipInfo(card) {
+      if (card.status === "held") return { icon: "⏸", label: "보류" };
+      const color = cardColor(card);
+      if (color === "green") return { icon: "●", label: "안정" };
+      if (color === "yellow") return { icon: "▲", label: "주의" };
+      return { icon: "■", label: "긴급" };
+    }
+
+    function buildFaceLabel(labelText, card) {
+      const wrap = document.createElement("div");
+      wrap.className = "card-face-label";
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      wrap.appendChild(label);
+
+      const chipInfo = statusChipInfo(card);
+      const chip = document.createElement("span");
+      chip.className = "status-chip";
+      chip.innerHTML = `<span class="status-icon">${chipInfo.icon}</span>${chipInfo.label}`;
+      wrap.appendChild(chip);
+      return wrap;
+    }
+
+    function buildEditRow(cardId, data) {
+      const editRow = document.createElement("div");
+      editRow.className = "card-edit-row";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "icon-btn";
+      editBtn.textContent = "수정";
+      editBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        openEdit(cardId, data);
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "icon-btn";
+      delBtn.textContent = "삭제";
+      delBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        cardIdToDelete = cardId;
+        deleteCardModal.classList.remove("hidden");
+      });
+
+      editRow.appendChild(editBtn);
+      editRow.appendChild(delBtn);
+      return editRow;
     }
 
     function renderCard(docSnap) {
@@ -275,115 +395,94 @@
       const color = cardColor(card);
       const isFlipped = flippedCards.has(cardId);
 
-      const el = document.createElement("div");
-      el.className = `card color-${color}`;
+      const wrapper = document.createElement("div");
+      wrapper.className = `card-flip color-${color}${cardId === activeCardId ? " active" : ""}`;
+      wrapper.dataset.cardId = cardId;
+      wrapper.addEventListener("click", () => setActiveCard(cardId));
 
-      const faceLabel = document.createElement("div");
-      faceLabel.className = "card-face-label";
-      faceLabel.textContent = isFlipped ? "뒷면" : "앞면";
+      const inner = document.createElement("div");
+      inner.className = `card-flip-inner${isFlipped ? " flipped" : ""}`;
 
-      const text = document.createElement("div");
-      text.className = "card-text";
-      text.textContent = isFlipped ? data.back : data.front;
-      text.addEventListener("click", () => {
-        if (isFlipped) flippedCards.delete(cardId);
-        else flippedCards.add(cardId);
-        renderCardsNow();
+      // 앞면
+      const front = document.createElement("div");
+      front.className = "card-face card-face-front";
+      front.appendChild(buildFaceLabel("앞면", card));
+
+      const frontText = document.createElement("div");
+      frontText.className = "card-text";
+      frontText.textContent = data.front;
+      frontText.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        setFlipped(cardId, true);
       });
+      front.appendChild(frontText);
 
-      const footer = document.createElement("div");
-      footer.className = "card-footer";
-      const expiryText = document.createElement("span");
-      expiryText.textContent = card.status === "held" ? "고정됨 (again)" : formatExpiry(card.expiresAt);
-      footer.appendChild(expiryText);
+      const frontFooter = document.createElement("div");
+      frontFooter.className = "card-footer";
+      const frontExpiry = document.createElement("span");
+      frontExpiry.textContent = card.status === "held" ? "고정됨 (again)" : formatExpiry(card.expiresAt);
+      frontFooter.appendChild(frontExpiry);
+      front.appendChild(frontFooter);
+      front.appendChild(buildEditRow(cardId, data));
 
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "icon-btn";
-      editBtn.textContent = "수정";
-      editBtn.addEventListener("click", () => openEdit(cardId, data));
+      // 뒷면
+      const back = document.createElement("div");
+      back.className = "card-face card-face-back";
+      back.appendChild(buildFaceLabel("뒷면", card));
 
-      const delBtn = document.createElement("button");
-      delBtn.type = "button";
-      delBtn.className = "icon-btn";
-      delBtn.textContent = "삭제";
-      delBtn.addEventListener("click", () => {
-        cardIdToDelete = cardId;
-        deleteCardModal.classList.remove("hidden");
+      const backText = document.createElement("div");
+      backText.className = "card-text";
+      backText.textContent = data.back;
+      backText.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        setFlipped(cardId, false);
       });
+      back.appendChild(backText);
 
-      const editRow = document.createElement("div");
-      editRow.style.display = "flex";
-      editRow.style.gap = "6px";
-      editRow.appendChild(editBtn);
-      editRow.appendChild(delBtn);
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
 
-      el.appendChild(faceLabel);
-      el.appendChild(text);
+      const againBtn = document.createElement("button");
+      againBtn.type = "button";
+      againBtn.className = "btn-unknown";
+      againBtn.textContent = data.status === "held" ? "다시 체크" : "again";
+      againBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        toggleAgain(cardId);
+      });
+      actions.appendChild(againBtn);
 
-      if (isFlipped) {
-        const actions = document.createElement("div");
-        actions.className = "card-actions";
-
-        const cardRef = doc(db, "users", currentUser.uid, "vaults", vaultId, "cards", cardId);
-
-        const againBtn = document.createElement("button");
-        againBtn.type = "button";
-        againBtn.className = "btn-unknown";
-        againBtn.textContent = data.status === "held" ? "다시 체크 (해제)" : "again";
-        againBtn.addEventListener("click", async (ev) => {
-          ev.stopPropagation();
-          if (data.status === "held") {
-            const base = currentSettings.baseIntervalDays;
-            await updateDoc(cardRef, {
-              status: "graded",
-              intervalDays: base,
-              expiresAt: addDays(new Date(), base),
-              updatedAt: serverTimestamp(),
-            });
-          } else {
-            await updateDoc(cardRef, {
-              status: "held",
-              intervalDays: currentSettings.baseIntervalDays,
-              updatedAt: serverTimestamp(),
-            });
-          }
-          flippedCards.delete(cardId);
-        });
-        actions.appendChild(againBtn);
-
-        if (data.status !== "held") {
-          [
-            { grade: "bad", label: "bad", cls: "btn-bad" },
-            { grade: "good", label: "good", cls: "btn-know" },
-            { grade: "easy", label: "ok", cls: "btn-know" },
-          ].forEach(({ grade, label, cls }) => {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            if (cls) btn.className = cls;
-            btn.textContent = label;
-            btn.addEventListener("click", async (ev) => {
-              ev.stopPropagation();
-              const baseInterval = data.status === "held" ? currentSettings.baseIntervalDays : data.intervalDays;
-              const newInterval = nextIntervalDays(baseInterval, grade, currentSettings);
-              await updateDoc(cardRef, {
-                status: "graded",
-                intervalDays: newInterval,
-                expiresAt: addDays(new Date(), newInterval),
-                updatedAt: serverTimestamp(),
-              });
-              flippedCards.delete(cardId);
-            });
-            actions.appendChild(btn);
+      if (data.status !== "held") {
+        [
+          { grade: "bad", label: "bad", cls: "btn-bad" },
+          { grade: "good", label: "good", cls: "btn-know" },
+          { grade: "easy", label: "ok", cls: "btn-know" },
+        ].forEach(({ grade, label, cls }) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = cls;
+          btn.textContent = label;
+          btn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            gradeCard(cardId, grade);
           });
-        }
-
-        el.appendChild(actions);
+          actions.appendChild(btn);
+        });
       }
+      back.appendChild(actions);
 
-      el.appendChild(footer);
-      el.appendChild(editRow);
-      cardGrid.appendChild(el);
+      const backFooter = document.createElement("div");
+      backFooter.className = "card-footer";
+      const backExpiry = document.createElement("span");
+      backExpiry.textContent = card.status === "held" ? "고정됨 (again)" : formatExpiry(card.expiresAt);
+      backFooter.appendChild(backExpiry);
+      back.appendChild(backFooter);
+      back.appendChild(buildEditRow(cardId, data));
+
+      inner.appendChild(front);
+      inner.appendChild(back);
+      wrapper.appendChild(inner);
+      cardGrid.appendChild(wrapper);
     }
 
     function openEdit(cardId, data) {
@@ -395,6 +494,25 @@
       cardModal.classList.remove("hidden");
     }
 
+    document.addEventListener("keydown", (e) => {
+      const tag = document.activeElement ? document.activeElement.tagName : "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (isAnyModalOpen()) return;
+      if (!activeCardId) return;
+
+      if (e.key === " ") {
+        e.preventDefault();
+        setFlipped(activeCardId, !flippedCards.has(activeCardId));
+      } else if (e.key === "1") {
+        toggleAgain(activeCardId);
+      } else if (e.key === "2") {
+        gradeCard(activeCardId, "bad");
+      } else if (e.key === "3") {
+        gradeCard(activeCardId, "good");
+      } else if (e.key === "4") {
+        gradeCard(activeCardId, "easy");
+      }
+    });
   </script>
 </body>
 </html>
